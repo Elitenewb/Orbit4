@@ -133,7 +133,7 @@ button.selected {
 
 .hud-buttons {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -155,15 +155,18 @@ button.selected {
   border-radius: 50%;
   display: block;
   background: radial-gradient(circle at center, var(--bg-screen-dark) 0%, #303834 85%);
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+}
+
+.board-frame canvas:active {
+  cursor: grabbing;
 }
 
 @media (max-width: 720px) {
   .shell {
     padding: 14px;
-  }
-
-  .hud-buttons {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .mode-buttons {

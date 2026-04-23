@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react'
-import type { MouseEvent } from 'react'
+import type { PointerEvent as ReactPointerEvent } from 'react'
 import { COLUMNS, RINGS } from '../game/constants'
 import type { AnimationState, Board, Position } from '../game/types'
 import { getAnimationFrame } from './animations'
@@ -12,6 +12,8 @@ import {
 } from './geometry'
 
 const BOARD_SIZE = 760
+const TAP_ANGULAR_THRESHOLD = 0.03
+const TAP_MAX_DURATION_MS = 260
 
 interface CanvasBoardProps {
   board: Board
@@ -22,6 +24,17 @@ interface CanvasBoardProps {
   winningLine: Position[] | null
   onHoverColumn: (column: number | null) => void
   onSelectColumn: (column: number) => void
+  onRotationChange: (deg: number) => void
+}
+
+interface DragState {
+  pointerId: number
+  startAngleRad: number
+  startRotationDeg: number
+  totalDragRad: number
+  lastAngleRad: number
+  startTimeMs: number
+  isDragging: boolean
 }
 
 const chipColor = (cell: Board[number][number]): string => {
@@ -44,6 +57,17 @@ const hasWinningCell = (winningLine: Position[] | null, ring: number, column: nu
   })
 }
 
+const normalizeDelta = (value: number): number => {
+  let result = value
+  while (result > Math.PI) {
+    result -= Math.PI * 2
+  }
+  while (result < -Math.PI) {
+    result += Math.PI * 2
+  }
+  return result
+}
+
 export function CanvasBoard({
   board,
   rotationDeg,
@@ -53,8 +77,10 @@ export function CanvasBoard({
   winningLine,
   onHoverColumn,
   onSelectColumn,
+  onRotationChange,
 }: CanvasBoardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const dragStateRef = useRef<DragState | null>(null)
   const rotationRad = useMemo(() => toRadians(rotationDeg), [rotationDeg])
 
   useEffect(() => {
@@ -176,7 +202,7 @@ export function CanvasBoard({
     }
   }, [animation, board, hoverColumn, rotationRad, winningLine])
 
-  const pointFromEvent = (event: MouseEvent<HTMLCanvasElement>) => {
+  const pointFromEvent = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
     if (!canvas) {
       return null
@@ -188,33 +214,124 @@ export function CanvasBoard({
     }
   }
 
-  const onMouseMove = (event: MouseEvent<HTMLCanvasElement>) => {
-    if (disabled) {
-      onHoverColumn(null)
-      return
-    }
-    const point = pointFromEvent(event)
-    if (!point) {
-      return
-    }
+  const pointerAngle = (point: { x: number; y: number }) => {
     const geometry = getBoardGeometry(BOARD_SIZE, BOARD_SIZE)
-    const column = getColumnFromPoint(point.x, point.y, geometry, rotationRad)
-    onHoverColumn(column)
+    return Math.atan2(point.y - geometry.centerY, point.x - geometry.centerX)
   }
 
-  const onMouseLeave = () => onHoverColumn(null)
-
-  const onClick = (event: MouseEvent<HTMLCanvasElement>) => {
-    if (disabled) {
+  const onPointerDown = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (event.button !== 0 && event.pointerType === 'mouse') {
       return
     }
     const point = pointFromEvent(event)
     if (!point) {
       return
     }
-    const geometry = getBoardGeometry(BOARD_SIZE, BOARD_SIZE)
-    const column = getColumnFromPoint(point.x, point.y, geometry, rotationRad)
-    onSelectColumn(column)
+
+    const angle = pointerAngle(point)
+    dragStateRef.current = {
+      pointerId: event.pointerId,
+      startAngleRad: angle,
+      startRotationDeg: rotationDeg,
+      totalDragRad: 0,
+      lastAngleRad: angle,
+      startTimeMs: performance.now(),
+      isDragging: false,
+    }
+
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId)
+    } catch {
+      // ignore if capture fails
+    }
+
+    onHoverColumn(null)
+  }
+
+  const onPointerMove = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    const drag = dragStateRef.current
+    const point = pointFromEvent(event)
+    if (!point) {
+      return
+    }
+
+    if (!drag || drag.pointerId !== event.pointerId) {
+      if (disabled) {
+        onHoverColumn(null)
+        return
+      }
+      const geometry = getBoardGeometry(BOARD_SIZE, BOARD_SIZE)
+      const column = getColumnFromPoint(point.x, point.y, geometry, rotationRad)
+      onHoverColumn(column)
+      return
+    }
+
+    const angle = pointerAngle(point)
+    const delta = normalizeDelta(angle - drag.lastAngleRad)
+    drag.totalDragRad += Math.abs(delta)
+    drag.lastAngleRad = angle
+
+    if (!drag.isDragging && drag.totalDragRad > TAP_ANGULAR_THRESHOLD) {
+      drag.isDragging = true
+    }
+
+    if (drag.isDragging) {
+      const totalDelta = normalizeDelta(angle - drag.startAngleRad)
+      const totalDeltaDeg = (totalDelta * 180) / Math.PI
+      onRotationChange(drag.startRotationDeg + totalDeltaDeg)
+    }
+  }
+
+  const finishPointer = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    const drag = dragStateRef.current
+    if (!drag || drag.pointerId !== event.pointerId) {
+      return
+    }
+    dragStateRef.current = null
+
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    } catch {
+      // ignore if release fails
+    }
+
+    const duration = performance.now() - drag.startTimeMs
+    const isTap =
+      !drag.isDragging &&
+      drag.totalDragRad < TAP_ANGULAR_THRESHOLD &&
+      duration < TAP_MAX_DURATION_MS
+
+    if (isTap && !disabled) {
+      const point = pointFromEvent(event)
+      if (point) {
+        const geometry = getBoardGeometry(BOARD_SIZE, BOARD_SIZE)
+        const column = getColumnFromPoint(point.x, point.y, geometry, rotationRad)
+        onSelectColumn(column)
+      }
+    }
+  }
+
+  const onPointerUp = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    finishPointer(event)
+  }
+
+  const onPointerCancel = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    const drag = dragStateRef.current
+    if (!drag || drag.pointerId !== event.pointerId) {
+      return
+    }
+    dragStateRef.current = null
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    } catch {
+      // ignore
+    }
+  }
+
+  const onPointerLeave = () => {
+    if (!dragStateRef.current) {
+      onHoverColumn(null)
+    }
   }
 
   return (
@@ -223,9 +340,11 @@ export function CanvasBoard({
         ref={canvasRef}
         width={BOARD_SIZE}
         height={BOARD_SIZE}
-        onMouseMove={onMouseMove}
-        onMouseLeave={onMouseLeave}
-        onClick={onClick}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerCancel}
+        onPointerLeave={onPointerLeave}
         role="img"
         aria-label="Circular connect four board"
       />

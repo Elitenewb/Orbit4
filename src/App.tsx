@@ -11,7 +11,6 @@ import { MenuScreen } from './ui/MenuScreen'
 type Screen = 'menu' | 'game'
 
 const AI_PLAYER: Player = 'yellow'
-const ROTATE_STEP = 18
 
 function App() {
   const [screen, setScreen] = useState<Screen>('menu')
@@ -156,8 +155,6 @@ function App() {
         isDraw={isDraw}
         difficulty={difficulty}
         aiMode={mode === 'ai'}
-        onRotateLeft={() => setRotationDeg((current) => current - ROTATE_STEP)}
-        onRotateRight={() => setRotationDeg((current) => current + ROTATE_STEP)}
         onRestart={resetGame}
         onBackToMenu={backToMenu}
       />
@@ -172,6 +169,7 @@ function App() {
           winningLine={gameState.winningLine}
           onHoverColumn={setHoverColumn}
           onSelectColumn={onSelectColumn}
+          onRotationChange={setRotationDeg}
         />
       </main>
     </div>

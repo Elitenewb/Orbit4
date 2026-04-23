@@ -6,8 +6,6 @@ interface GameHUDProps {
   isDraw: boolean
   difficulty: number
   aiMode: boolean
-  onRotateLeft: () => void
-  onRotateRight: () => void
   onRestart: () => void
   onBackToMenu: () => void
 }
@@ -20,8 +18,6 @@ export function GameHUD({
   isDraw,
   difficulty,
   aiMode,
-  onRotateLeft,
-  onRotateRight,
   onRestart,
   onBackToMenu,
 }: GameHUDProps) {
@@ -39,12 +35,6 @@ export function GameHUD({
       </div>
 
       <div className="hud-buttons">
-        <button type="button" onClick={onRotateLeft}>
-          Rotate Left
-        </button>
-        <button type="button" onClick={onRotateRight}>
-          Rotate Right
-        </button>
         <button type="button" onClick={onRestart}>
           Restart
         </button>

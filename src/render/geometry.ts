@@ -5,7 +5,8 @@ export interface BoardGeometry {
   centerY: number
   boardRadius: number
   holeRadius: number
-  ringStep: number
+  ringRadii: number[]
+  slotRadii: number[]
 }
 
 export interface SlotGeometry {
@@ -16,25 +17,44 @@ export interface SlotGeometry {
   ringRadius: number
 }
 
+const TANGENT_STEP = Math.sin(Math.PI / COLUMNS)
+const FILL_FACTOR = 0.96
+const EFFECTIVE_STEP = TANGENT_STEP * FILL_FACTOR
+const GROWTH_RATIO = (1 + EFFECTIVE_STEP) / (1 - EFFECTIVE_STEP)
+
 export const toRadians = (degrees: number): number => (degrees * Math.PI) / 180
 
 export const normalizeColumn = (column: number): number => {
   return ((column % COLUMNS) + COLUMNS) % COLUMNS
 }
 
+const computeRingRadii = (boardRadius: number): number[] => {
+  const lastRingRadius = boardRadius / (1 + EFFECTIVE_STEP)
+  const innerRingRadius = lastRingRadius / Math.pow(GROWTH_RATIO, RINGS - 1)
+
+  const radii: number[] = []
+  for (let ring = 0; ring < RINGS; ring += 1) {
+    radii.push(innerRingRadius * Math.pow(GROWTH_RATIO, ring))
+  }
+  return radii
+}
+
 export const getBoardGeometry = (width: number, height: number): BoardGeometry => {
   const centerX = width / 2
   const centerY = height / 2
-  const boardRadius = Math.min(width, height) * 0.44
-  const holeRadius = boardRadius * 0.28
-  const ringStep = (boardRadius - holeRadius) / RINGS
+  const boardRadius = Math.min(width, height) * 0.46
+
+  const ringRadii = computeRingRadii(boardRadius)
+  const slotRadii = ringRadii.map((ringRadius) => ringRadius * EFFECTIVE_STEP)
+  const holeRadius = ringRadii[0] * (1 - EFFECTIVE_STEP)
 
   return {
     centerX,
     centerY,
     boardRadius,
     holeRadius,
-    ringStep,
+    ringRadii,
+    slotRadii,
   }
 }
 
@@ -48,12 +68,11 @@ export const getSlotGeometry = (
   geometry: BoardGeometry,
   rotationRad: number,
 ): SlotGeometry => {
-  const ringRadius = geometry.holeRadius + geometry.ringStep * (ring + 0.5)
+  const ringRadius = geometry.ringRadii[ring]
+  const radius = geometry.slotRadii[ring]
   const angle = getColumnAngle(column, rotationRad)
   const x = geometry.centerX + Math.cos(angle) * ringRadius
   const y = geometry.centerY + Math.sin(angle) * ringRadius
-  const arcLength = (Math.PI * 2 * ringRadius) / COLUMNS
-  const radius = Math.min(geometry.ringStep * 0.44, arcLength * 0.42)
 
   return { x, y, radius, angle, ringRadius }
 }
