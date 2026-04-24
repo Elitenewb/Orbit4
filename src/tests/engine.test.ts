@@ -31,8 +31,8 @@ describe('engine', () => {
 
   it('detects ring wins that wrap around the seam', () => {
     const board = createEmptyBoard()
-    board[2][9] = 'yellow'
-    board[2][10] = 'yellow'
+    board[2][12] = 'yellow'
+    board[2][13] = 'yellow'
     board[2][0] = 'yellow'
     board[2][1] = 'yellow'
 
@@ -42,7 +42,7 @@ describe('engine', () => {
 
   it('detects clockwise diagonal wins with column wrapping', () => {
     const board = createEmptyBoard()
-    board[0][10] = 'red'
+    board[0][13] = 'red'
     board[1][0] = 'red'
     board[2][1] = 'red'
     board[3][2] = 'red'
